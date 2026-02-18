@@ -1,0 +1,42 @@
+# RBAC for the run worker: least-privilege, namespace-scoped.
+# The worker needs to create a Job + ConfigMap per run, watch the Job's pod,
+# follow its logs (get on pods/log covers `kubectl logs -f`-style streaming)
+# to relay output and the __CODEARENA_RESULT__ trailer, then clean up.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: codearena-worker
+  namespace: codearena
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: codearena-worker
+  namespace: codearena
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"] # read-only: runner pods are created/deleted via their Job
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: codearena-worker
+  namespace: codearena
+subjects:
+  - kind: ServiceAccount
+    name: codearena-worker
+    namespace: codearena
+roleRef:
+  kind: Role
+  name: codearena-worker
+  apiGroup: rbac.authorization.k8s.io

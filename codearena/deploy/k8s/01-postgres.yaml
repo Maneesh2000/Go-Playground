@@ -1,0 +1,82 @@
+# Postgres 16 — single-replica StatefulSet with a PVC for durability.
+# The password lives in the codearena-postgres Secret (referenced here and in
+# the DATABASE_URL assembled in 06-config.yaml).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: codearena-postgres
+  namespace: codearena
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: codearena # CHANGE ME in a real deployment
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: codearena
+spec:
+  clusterIP: None # headless: stable DNS for the StatefulSet pod
+  selector:
+    app: postgres
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: codearena
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: codearena
+            - name: POSTGRES_DB
+              value: codearena
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: codearena-postgres
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "codearena", "-d", "codearena"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

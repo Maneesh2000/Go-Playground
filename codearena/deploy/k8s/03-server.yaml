@@ -1,0 +1,68 @@
+# API server — stateless, 2 replicas behind a LoadBalancer.
+# Serves the web UI + REST API, runs migrations at startup, consumes
+# "run-events" (consumer group codearena-server) to stream live run
+# status/output to browsers over WebSocket.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codearena-server
+  namespace: codearena
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: codearena-server
+  template:
+    metadata:
+      labels:
+        app: codearena-server
+    spec:
+      containers:
+        - name: server
+          image: codearena-server:latest # build with Dockerfile.server
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: MIGRATIONS_DIR
+              value: /app/migrations
+          envFrom:
+            - configMapRef:
+                name: codearena-config # KAFKA_BROKERS
+            - secretRef:
+                name: codearena-secrets # DATABASE_URL, JWT_SECRET
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: codearena-server
+  namespace: codearena
+spec:
+  type: LoadBalancer
+  selector:
+    app: codearena-server
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

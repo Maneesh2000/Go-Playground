@@ -1,0 +1,23 @@
+# Shared configuration for server + worker.
+# Non-sensitive values in the ConfigMap, credentials in the Secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: codearena-config
+  namespace: codearena
+data:
+  KAFKA_BROKERS: "kafka-0.kafka.codearena.svc.cluster.local:9092"
+  # Hard wall-clock kill for a run (time_limit_exceeded), in milliseconds.
+  RUN_TIMEOUT_MS: "10000"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: codearena-secrets
+  namespace: codearena
+type: Opaque
+stringData:
+  # Password must match POSTGRES_PASSWORD in 01-postgres.yaml. CHANGE both.
+  DATABASE_URL: "postgres://codearena:codearena@postgres-0.postgres.codearena.svc.cluster.local:5432/codearena?sslmode=disable"
+  # CHANGE ME: any long random string, e.g. `openssl rand -hex 32`.
+  JWT_SECRET: "change-me-to-a-long-random-string"

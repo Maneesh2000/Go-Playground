@@ -1,0 +1,8 @@
+# Everything CodeArena lives in its own namespace, including the ephemeral
+# runner Job pods the worker creates for each playground run.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: codearena
+  labels:
+    app.kubernetes.io/name: codearena

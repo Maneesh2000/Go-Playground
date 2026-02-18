@@ -1,0 +1,44 @@
+# Run worker — consumes the "runs" topic (group codearena-workers), launches
+# one Kubernetes Job pod (codearena-runner image) per run, follows the pod log
+# to stream output, then writes the result to Postgres and produces
+# status/chunk/done events to the "run-events" topic.
+# Uses the codearena-worker ServiceAccount (05-rbac.yaml) to manage Jobs.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codearena-worker
+  namespace: codearena
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: codearena-worker
+  template:
+    metadata:
+      labels:
+        app: codearena-worker
+    spec:
+      serviceAccountName: codearena-worker
+      containers:
+        - name: worker
+          image: codearena-worker:latest # build with Dockerfile.worker
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: EXECUTOR
+              value: k8s # production mode: execute runs in ephemeral Job pods
+            - name: K8S_NAMESPACE
+              value: codearena
+            - name: RUNNER_IMAGE
+              value: codearena-runner:latest # build with runner/Dockerfile
+          envFrom:
+            - configMapRef:
+                name: codearena-config # KAFKA_BROKERS, RUN_TIMEOUT_MS
+            - secretRef:
+                name: codearena-secrets # DATABASE_URL (JWT_SECRET unused here)
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

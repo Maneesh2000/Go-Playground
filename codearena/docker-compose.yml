@@ -1,0 +1,99 @@
+# CodeArena — full local stack: postgres + kafka + api server + run worker.
+# `docker compose up --build` then open http://localhost:8080 (demo/demo123).
+#
+# The worker runs with EXECUTOR=local here so the whole playground works with
+# a single compose command (no cluster needed). The production design executes
+# each run in a Kubernetes Job pod — see deploy/k8s/ and the README.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: codearena
+      POSTGRES_PASSWORD: codearena
+      POSTGRES_DB: codearena
+    ports:
+      - "5432:5432" # exposed for `make run-server` local dev + `make psql`
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codearena -d codearena"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    # Official Apache image (Bitnami's free Docker Hub images were withdrawn in 2025).
+    image: apache/kafka:3.9.1
+    environment:
+      # Single-node KRaft (no ZooKeeper): this node is both broker and controller.
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "controller,broker"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      # PLAINTEXT :9092 for in-network clients (server/worker containers),
+      # EXTERNAL :9094 advertised as localhost for host-side `make run-*` dev.
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      # Single-node: internal topics can't be replicated beyond 1 broker.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      # Let the server/worker create "runs"/"run-events" on first use.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9094:9094" # host access for local dev (KAFKA_BROKERS=localhost:9094)
+    # No data volume: broker state is ephemeral in dev. Topics are re-created
+    # on boot by the server/worker (EnsureTopics) and all durable state lives
+    # in Postgres, so losing Kafka data across restarts is harmless here.
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: "postgres://codearena:codearena@postgres:5432/codearena?sslmode=disable"
+      KAFKA_BROKERS: "kafka:9092"
+      JWT_SECRET: "dev-secret-change-me"
+      MIGRATIONS_DIR: "/app/migrations"
+      # EXECUTOR intentionally unset: the API server never executes code.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      DATABASE_URL: "postgres://codearena:codearena@postgres:5432/codearena?sslmode=disable"
+      KAFKA_BROKERS: "kafka:9092"
+      # local = compile & run user code in-process (dev convenience).
+      # The production path is EXECUTOR=k8s, which launches a Job pod per
+      # run using the codearena-runner image — see deploy/k8s/.
+      EXECUTOR: "local"
+      # Hard wall-clock kill for a run (time_limit_exceeded), in milliseconds.
+      RUN_TIMEOUT_MS: "10000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

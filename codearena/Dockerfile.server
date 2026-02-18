@@ -1,0 +1,40 @@
+# CodeArena API server — multi-stage build.
+# Stage 1 compiles the React frontend (frontend/ -> static assets);
+# stage 2 compiles ./cmd/server; the runtime is a slim alpine image that
+# carries the built web UI and the SQL migrations (run at startup from
+# MIGRATIONS_DIR).
+
+# --- Frontend build: React 18 + Vite, emits static assets ---
+FROM node:22-alpine AS webbuild
+WORKDIR /src/frontend
+
+# Cache npm downloads separately from source changes.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+# vite.config.js outDir is ../web -> /src/web inside this stage.
+RUN npm run build
+
+# --- Go build ---
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+
+# Cache module downloads separately from source changes.
+COPY go.* ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/server ./cmd/server
+
+# --- Runtime ---
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+
+COPY --from=build /out/server /app/server
+COPY --from=webbuild /src/web/ /app/web/
+COPY migrations/ /app/migrations/
+
+EXPOSE 8080
+ENTRYPOINT ["/app/server"]
