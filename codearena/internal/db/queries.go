@@ -129,3 +129,68 @@ func (s *Store) FinishRun(ctx context.Context, id, status, output, errMsg string
 		id, status, output, errMsg, exitCode, runtimeMS)
 	return err
 }
+
+// --- workspaces ---
+
+const workspaceColumns = `id::text, user_id, name, image, status, created_at, updated_at`
+
+func scanWorkspace(row pgx.Row) (models.Workspace, error) {
+	var w models.Workspace
+	err := row.Scan(&w.ID, &w.UserID, &w.Name, &w.Image, &w.Status, &w.CreatedAt, &w.UpdatedAt)
+	return w, mapErr(err)
+}
+
+// CreateWorkspace inserts a new workspace row in the "creating" state.
+func (s *Store) CreateWorkspace(ctx context.Context, userID int64, name, image string) (models.Workspace, error) {
+	return scanWorkspace(s.Pool.QueryRow(ctx, `
+		INSERT INTO workspaces (user_id, name, image, status)
+		VALUES ($1, $2, $3, $4)
+		RETURNING `+workspaceColumns,
+		userID, name, image, models.WorkspaceCreating))
+}
+
+// GetWorkspace returns a workspace by id scoped to its owner (defense in depth:
+// callers must pass the authenticated user so one user can't read another's).
+func (s *Store) GetWorkspace(ctx context.Context, id string, userID int64) (models.Workspace, error) {
+	return scanWorkspace(s.Pool.QueryRow(ctx, `
+		SELECT `+workspaceColumns+` FROM workspaces WHERE id = $1 AND user_id = $2`, id, userID))
+}
+
+// ListUserWorkspaces returns the caller's workspaces, newest first.
+func (s *Store) ListUserWorkspaces(ctx context.Context, userID int64) ([]models.Workspace, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT `+workspaceColumns+` FROM workspaces WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []models.Workspace{}
+	for rows.Next() {
+		w, err := scanWorkspace(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+// SetWorkspaceStatus updates the lifecycle status (creating/running/stopped/error).
+func (s *Store) SetWorkspaceStatus(ctx context.Context, id, status string) error {
+	_, err := s.Pool.Exec(ctx, `
+		UPDATE workspaces SET status = $2, updated_at = now() WHERE id = $1`, id, status)
+	return err
+}
+
+// DeleteWorkspace removes the row (Kubernetes objects are torn down separately).
+func (s *Store) DeleteWorkspace(ctx context.Context, id string, userID int64) error {
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM workspaces WHERE id = $1 AND user_id = $2`, id, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

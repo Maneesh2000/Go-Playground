@@ -48,3 +48,26 @@ type RunSummary struct {
 	CreatedAt time.Time `json:"created_at"`
 	Snippet   string    `json:"snippet"`
 }
+
+// Workspace statuses. A workspace is "running" when its Deployment is scaled to
+// 1 and "stopped" when hibernated (scaled to 0, PVC retained).
+const (
+	WorkspaceCreating = "creating"
+	WorkspaceRunning  = "running"
+	WorkspaceStopped  = "stopped"
+	WorkspaceError    = "error"
+)
+
+// Workspace mirrors the workspaces table: one persistent, per-user project.
+// It maps to a Deployment + PVC + Service + Ingress managed by internal/workspace.
+type Workspace struct {
+	ID        string    `json:"id"`
+	UserID    int64     `json:"user_id"`
+	Name      string    `json:"name"`
+	Image     string    `json:"image"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	// PreviewURL is populated by the API layer (not stored) from config.
+	PreviewURL string `json:"preview_url,omitempty"`
+}
