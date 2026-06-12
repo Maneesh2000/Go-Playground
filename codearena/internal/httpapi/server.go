@@ -12,6 +12,7 @@ import (
 
 	"github.com/amura/codearena/internal/config"
 	"github.com/amura/codearena/internal/db"
+	"github.com/amura/codearena/internal/models"
 	"github.com/amura/codearena/internal/ws"
 )
 
@@ -20,20 +21,34 @@ type RunPublisher interface {
 	PublishRun(ctx context.Context, runID string) error
 }
 
+// WorkspaceManager controls the Kubernetes objects behind a workspace. It is
+// satisfied by *workspace.Manager; kept as an interface so the server does not
+// hard-depend on a live cluster (nil => workspace endpoints report unavailable).
+type WorkspaceManager interface {
+	Create(ctx context.Context, ws models.Workspace) error
+	Start(ctx context.Context, id string) error
+	Stop(ctx context.Context, id string) error
+	Delete(ctx context.Context, id string) error
+	PreviewURL(id string) string
+	AgentEndpoint(id string) string
+}
+
 // Server wires config, storage, websocket hub and the Kafka producer into an
 // http.Handler.
 type Server struct {
-	cfg       config.Config
-	store     *db.Store
-	hub       *ws.Hub
-	publisher RunPublisher
-	staticDir string
+	cfg        config.Config
+	store      *db.Store
+	hub        *ws.Hub
+	publisher  RunPublisher
+	workspaces WorkspaceManager
+	staticDir  string
 }
 
 // New creates the API server. staticDir is the directory served at "/"
-// (normally ./web, owned by the frontend agent).
-func New(cfg config.Config, store *db.Store, hub *ws.Hub, publisher RunPublisher, staticDir string) *Server {
-	return &Server{cfg: cfg, store: store, hub: hub, publisher: publisher, staticDir: staticDir}
+// (normally ./web, owned by the frontend agent). workspaces may be nil when the
+// server runs without cluster access (workspace endpoints then 503).
+func New(cfg config.Config, store *db.Store, hub *ws.Hub, publisher RunPublisher, workspaces WorkspaceManager, staticDir string) *Server {
+	return &Server{cfg: cfg, store: store, hub: hub, publisher: publisher, workspaces: workspaces, staticDir: staticDir}
 }
 
 // Handler builds the full route table with middleware applied.
@@ -54,6 +69,16 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/runs", s.auth(s.handleCreateRun))
 	mux.Handle("GET /api/runs", s.auth(s.handleListRuns))
 	mux.Handle("GET /api/runs/{id}", s.auth(s.handleGetRun))
+
+	// Workspaces (Replit-like persistent projects).
+	mux.Handle("POST /api/workspaces", s.auth(s.handleCreateWorkspace))
+	mux.Handle("GET /api/workspaces", s.auth(s.handleListWorkspaces))
+	mux.Handle("GET /api/workspaces/{id}", s.auth(s.handleGetWorkspace))
+	mux.Handle("DELETE /api/workspaces/{id}", s.auth(s.handleDeleteWorkspace))
+	mux.Handle("POST /api/workspaces/{id}/start", s.auth(s.handleStartWorkspace))
+	mux.Handle("POST /api/workspaces/{id}/stop", s.auth(s.handleStopWorkspace))
+	// Browser<->agent proxy (auth via ?token= since browsers can't set WS headers).
+	mux.HandleFunc("GET /ws/workspace/{id}", s.handleWorkspaceWS)
 
 	// Static SPA at the root; everything above is more specific and wins.
 	mux.Handle("/", s.spaHandler())

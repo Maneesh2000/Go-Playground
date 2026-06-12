@@ -19,6 +19,7 @@ import (
 	"github.com/amura/codearena/internal/db"
 	"github.com/amura/codearena/internal/httpapi"
 	"github.com/amura/codearena/internal/queue"
+	"github.com/amura/codearena/internal/workspace"
 	"github.com/amura/codearena/internal/ws"
 )
 
@@ -76,7 +77,17 @@ func main() {
 	hub := ws.NewHub()
 	go consumeRunEvents(ctx, reader, hub)
 
-	api := httpapi.New(cfg, store, hub, &kafkaPublisher{writer: writer}, "./web")
+	// Workspace manager needs cluster access; disable gracefully if unavailable
+	// (e.g. running under docker-compose) so the playground still works.
+	var workspaces httpapi.WorkspaceManager
+	if wm, err := workspace.NewManager(cfg); err != nil {
+		slog.Warn("workspaces disabled (no cluster access)", "error", err)
+	} else {
+		workspaces = wm
+		slog.Info("workspaces enabled", "namespace", cfg.WorkspaceNamespace, "preview_base", cfg.PreviewBaseDomain)
+	}
+
+	api := httpapi.New(cfg, store, hub, &kafkaPublisher{writer: writer}, workspaces, "./web")
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           api.Handler(),
