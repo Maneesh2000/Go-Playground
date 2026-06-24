@@ -527,3 +527,56 @@ textarea.code {
   .page { padding: 20px 14px 40px; }
   .runs-menu { width: 280px; }
 }
+
+/* ---------- Workspaces list + IDE (P4) ---------- */
+.nav-links { display: flex; gap: 14px; margin-left: 18px; }
+.nav-links a { color: #9aa4b2; text-decoration: none; font-size: 14px; }
+.nav-links a:hover { color: #e6e6e6; }
+
+.workspaces-page { max-width: 720px; }
+.ws-create { display: flex; gap: 8px; margin: 16px 0; }
+.ws-create input { flex: 1; padding: 8px 10px; background: #11151c; border: 1px solid #2a3038; border-radius: 6px; color: #e6e6e6; }
+.ws-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ws-item { display: flex; gap: 8px; align-items: stretch; }
+.ws-open { flex: 1; display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #11151c; border: 1px solid #2a3038; border-radius: 8px; color: #e6e6e6; cursor: pointer; }
+.ws-open:hover { border-color: #3a4553; }
+.ws-name { font-weight: 600; }
+.ws-badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #2a3038; }
+.ws-badge.running { background: #14351f; color: #6ee7a0; }
+.ws-badge.stopped { background: #2a3038; color: #9aa4b2; }
+.ws-badge.error { background: #3a1c1c; color: #ff8a8a; }
+.ws-del { background: transparent; border: 1px solid #2a3038; border-radius: 8px; color: #9aa4b2; cursor: pointer; padding: 0 12px; }
+
+/* IDE layout */
+.ws-ide { display: flex; flex-direction: column; height: calc(100vh - 52px); }
+.ws-topbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: #0e1218; border-bottom: 1px solid #1f2530; }
+.ws-title { font-weight: 600; }
+.ws-status { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #2a3038; }
+.ws-status.ready { background: #14351f; color: #6ee7a0; }
+.ws-status.connecting { background: #35300f; color: #e7d76e; }
+.ws-status.disconnected { background: #3a1c1c; color: #ff8a8a; }
+.ws-actions { margin-left: auto; display: flex; gap: 8px; }
+.ws-actions button, .link-btn { background: #11151c; border: 1px solid #2a3038; color: #e6e6e6; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+.link-btn { background: transparent; }
+
+.ws-body { flex: 1; display: flex; min-height: 0; }
+.ws-sidebar { width: 240px; border-right: 1px solid #1f2530; overflow: auto; background: #0b0e14; }
+.ws-note { padding: 12px; color: #9aa4b2; font-size: 13px; }
+.tree-head, .pane-head { font-size: 11px; letter-spacing: 0.08em; color: #6b7480; padding: 8px 10px; }
+.tree-row { display: flex; align-items: center; gap: 6px; padding: 0 8px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+.tree-row:hover { background: #141922; }
+.tree-icon { width: 12px; color: #6b7480; }
+.tree-error { padding: 10px; color: #ff8a8a; font-size: 12px; }
+
+.ws-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.editor-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.tabbar { display: flex; background: #0e1218; border-bottom: 1px solid #1f2530; overflow-x: auto; }
+.tab { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-right: 1px solid #1f2530; cursor: pointer; font-size: 13px; color: #9aa4b2; }
+.tab.active { background: #11151c; color: #e6e6e6; }
+.tab-close { color: #6b7480; }
+.tab-close:hover { color: #ff8a8a; }
+.editor-body { flex: 1; min-height: 0; }
+.editor-empty { padding: 24px; color: #6b7480; }
+
+.ws-terminal { height: 34%; border-top: 1px solid #1f2530; display: flex; flex-direction: column; background: #0b0e14; }
+.terminal-host { flex: 1; min-height: 0; padding: 4px 8px; }
