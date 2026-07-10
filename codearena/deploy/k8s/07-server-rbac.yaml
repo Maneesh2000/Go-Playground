@@ -1,0 +1,42 @@
+# RBAC for the control-plane server to manage workspace objects.
+# The server (unlike the worker, which only creates run Jobs) provisions a
+# Deployment + PVC + Service + Ingress per workspace and scales them to
+# hibernate/resume, so it needs broader, still namespace-scoped, permissions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: codearena-server
+  namespace: codearena
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: codearena-server
+  namespace: codearena
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"] # scale = hibernate/resume
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims", "services"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"] # read-only: locate the workspace pod for the WS proxy
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: codearena-server
+  namespace: codearena
+subjects:
+  - kind: ServiceAccount
+    name: codearena-server
+    namespace: codearena
+roleRef:
+  kind: Role
+  name: codearena-server
+  apiGroup: rbac.authorization.k8s.io

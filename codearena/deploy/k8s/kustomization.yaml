@@ -1,0 +1,14 @@
+# Base kustomization: bundles the CodeArena manifests so they can be applied
+# as a unit (`kubectl apply -k deploy/k8s`) and referenced by overlays such as
+# ../gke-kubeadm. Does not change any of the manifests themselves.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - 00-namespace.yaml
+  - 01-postgres.yaml
+  - 02-kafka.yaml
+  - 03-server.yaml
+  - 04-worker.yaml
+  - 05-rbac.yaml
+  - 06-config.yaml
+  - 07-server-rbac.yaml

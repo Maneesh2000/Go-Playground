@@ -1,0 +1,18 @@
+# Runner pods execute untrusted user code. They only need to compile and run
+# locally and stream to their own log (which the worker reads via the API
+# server) — they never need to originate network connections. Deny ALL egress
+# so a submission can't call out (SSRF, exfiltration, crypto-mining, scanning
+# the cluster). Calico enforces this. stdlib compile+run still works; programs
+# importing third-party modules won't build (no module fetch) — intended.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runner-deny-egress
+  namespace: codearena
+spec:
+  podSelector:
+    matchLabels:
+      app: codearena-run # the label internal/executor/k8s.go stamps on runner Job pods
+  policyTypes:
+    - Egress
+  egress: [] # empty = deny all egress

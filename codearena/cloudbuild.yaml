@@ -1,0 +1,36 @@
+# CodeArena — build all three images (server, worker, runner) natively on
+# amd64 in Cloud Build and push them to Artifact Registry.
+# Submit from the repo root:  gcloud builds submit --config cloudbuild.yaml .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: server
+    args:
+      - build
+      - -f
+      - Dockerfile.server
+      - -t
+      - asia-south1-docker.pkg.dev/project-dbdc709c-9d43-4440-bd0/codearena/server:v1
+      - .
+  - name: gcr.io/cloud-builders/docker
+    id: worker
+    args:
+      - build
+      - -f
+      - Dockerfile.worker
+      - -t
+      - asia-south1-docker.pkg.dev/project-dbdc709c-9d43-4440-bd0/codearena/worker:v1
+      - .
+  - name: gcr.io/cloud-builders/docker
+    id: runner
+    args:
+      - build
+      - -t
+      - asia-south1-docker.pkg.dev/project-dbdc709c-9d43-4440-bd0/codearena/runner:v1
+      - runner
+images:
+  - asia-south1-docker.pkg.dev/project-dbdc709c-9d43-4440-bd0/codearena/server:v1
+  - asia-south1-docker.pkg.dev/project-dbdc709c-9d43-4440-bd0/codearena/worker:v1
+  - asia-south1-docker.pkg.dev/project-dbdc709c-9d43-4440-bd0/codearena/runner:v1
+options:
+  machineType: E2_HIGHCPU_8
+timeout: 1800s

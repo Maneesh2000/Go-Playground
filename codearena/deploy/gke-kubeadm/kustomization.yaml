@@ -1,0 +1,71 @@
+# Overlay to deploy CodeArena on the self-managed kubeadm GCP cluster.
+# Non-destructive: layers on top of ../k8s without editing those files.
+#   kubectl apply -k deploy/gke-kubeadm
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../k8s # the shipped manifests, now a kustomize base
+  - ingress.yaml # route the server through the already-installed ingress-nginx
+  - runner-egress-netpol.yaml # deny egress from untrusted runner pods
+
+# Point the two Deployment images at the images we pushed to Artifact Registry.
+images:
+  - name: codearena-server
+    newName: asia-south1-docker.pkg.dev/project-dbdc709c-9d43-4440-bd0/codearena/server
+    newTag: v5 # + preview URL port (P5)
+  - name: codearena-worker
+    newName: asia-south1-docker.pkg.dev/project-dbdc709c-9d43-4440-bd0/codearena/worker
+    newTag: v1
+
+patches:
+  # Worker: RUNNER_IMAGE is an env VALUE (not an image field) so the image
+  # transformer can't reach it — patch it directly. Also drop to 1 replica.
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: codearena-worker
+        namespace: codearena
+      spec:
+        replicas: 1
+        template:
+          spec:
+            containers:
+              - name: worker
+                env:
+                  - name: RUNNER_IMAGE
+                    value: asia-south1-docker.pkg.dev/project-dbdc709c-9d43-4440-bd0/codearena/runner:v3
+  # Server: 1 replica (small nodes) + workspace config. PREVIEW_BASE_DOMAIN uses
+  # nip.io so preview hosts resolve to the worker node IP without owning a domain.
+  - patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: codearena-server
+        namespace: codearena
+      spec:
+        replicas: 1
+        template:
+          spec:
+            containers:
+              - name: server
+                env:
+                  - name: WORKSPACE_NAMESPACE
+                    value: codearena
+                  - name: PREVIEW_BASE_DOMAIN
+                    value: preview.34.93.3.43.nip.io
+                  - name: PREVIEW_URL_PORT
+                    value: "31771"
+                  - name: WORKSPACE_IMAGE
+                    value: asia-south1-docker.pkg.dev/project-dbdc709c-9d43-4440-bd0/codearena/workspace:v1
+  # Server Service: no cloud LoadBalancer on kubeadm — use ClusterIP and let
+  # the Ingress (ingress.yaml) front it.
+  - patch: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: codearena-server
+        namespace: codearena
+      spec:
+        type: ClusterIP

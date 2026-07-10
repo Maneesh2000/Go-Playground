@@ -17,6 +17,7 @@ spec:
       labels:
         app: codearena-server
     spec:
+      serviceAccountName: codearena-server # workspace object management (07-server-rbac.yaml)
       containers:
         - name: server
           image: codearena-server:latest # build with Dockerfile.server
